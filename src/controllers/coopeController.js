@@ -1,6 +1,10 @@
 const puppeteer = require("puppeteer");
 
-const url = "https://www.lacoopeencasa.coop/listado/categoria/almacen/2";
+const url = {
+  general: "https://www.lacoopeencasa.coop/listado/categoria/almacen/2",
+  search: "https://www.lacoopeencasa.coop/listado/busqueda-avanzada/",
+  offers: "https://www.lacoopeencasa.coop/",
+};
 
 async function autoScroll(page) {
   await page.evaluate(async () => {
@@ -23,6 +27,8 @@ async function autoScroll(page) {
 
 const getCoopeProducts = async (req, res) => {
   try {
+    const { search } = req.query;
+    const url = search ? url.search + search.replaceAll(" ", "_") : url.general;
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
 
@@ -41,6 +47,46 @@ const getCoopeProducts = async (req, res) => {
         return {
           name: item.querySelector(".text-capitalize").innerText,
           price: item.querySelector(".precio-entero").innerText,
+          regularPrice: item.querySelector("span.precio-regular-valor.precio-tachado")?.innerText,
+          priceKilo: item.querySelector(".precio-unitario.no-seleccionable").innerText,
+          image: item.querySelector("img").src,
+        };
+      });
+    });
+
+    await browser.close();
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getCoopeWeeklyOffers = async (req, res) => {
+  try {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+
+    // Navegar a la página objetivo
+    await page.goto(url.offers, {
+      waitUntil: "networkidle0",
+    });
+
+    // Loading images
+    await autoScroll(page);
+
+    // Evaluar el contenido de la página y extraer los productos
+    const products = await page.evaluate(() => {
+      const container = document.querySelector("div.drag-scroll-content");
+
+      if (!container) return [];
+
+      const items = Array.from(container.querySelectorAll("div.card.hoverable"));
+      return items.map((item) => {
+        console.log(item);
+        return {
+          name: item.querySelector(".text-capitalize").innerText,
+          price: item.querySelector(".precio-entero").innerText,
+          regularPrice: item.querySelector("span.precio-regular-valor.precio-tachado")?.innerText,
           priceKilo: item.querySelector(".precio-unitario.no-seleccionable").innerText,
           image: item.querySelector("img").src,
         };
@@ -56,4 +102,5 @@ const getCoopeProducts = async (req, res) => {
 
 module.exports = {
   getCoopeProducts,
+  getCoopeWeeklyOffers,
 };
